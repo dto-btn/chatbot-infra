@@ -19,12 +19,20 @@ resource "azurerm_virtual_network" "main" {
   name                = "${var.name_prefix}-${var.project_name}-vnet"
   location            = azurerm_resource_group.main.location
   resource_group_name = azurerm_resource_group.main.name
-
-  address_space = [ "10.2.0.0/24" ]
+  address_space       = [ "10.2.0.0/16" ]
+  dns_servers         = ["10.2.0.4", "10.2.0.5"]
 
   tags = {
     environment = "Pilot"
   }
+}
+
+resource "azurerm_subnet" "main" {
+    name                  = "chatbot"
+    address_prefixes      = ["10.2.0.0/23"]
+    virtual_network_name  = azurerm_virtual_network.main.name
+    resource_group_name   = azurerm_resource_group.main.name
+    depends_on            = [ azurerm_virtual_network.main ]
 }
 
 /****************************************************
@@ -63,6 +71,7 @@ resource "azurerm_container_registry" "main" {
 resource "azurerm_container_registry_task" "main" {
   name                  = "build-chatbot-api"
   container_registry_id = azurerm_container_registry.main.id
+  depends_on = [ azurerm_container_registry.main ]
   platform {
     os = "Linux"
   }
@@ -98,14 +107,22 @@ resource "azurerm_role_assignment" "container_registry" {
     scope                 = azurerm_container_registry.main.id
     role_definition_name  = "AcrPull"
     principal_id          = azurerm_user_assigned_identity.main.principal_id
-    depends_on            = [ azurerm_user_assigned_identity.main ]
+    depends_on            = [ azurerm_user_assigned_identity.main, azurerm_container_registry.main ]
 }
 
-resource "azurerm_role_assignment" "key_vault" {
-    scope                 = azurerm_key_vault.infra.id
+/*resource "azurerm_role_assignment" "key_vault" {
+    scope                 = data.azurerm_key_vault.infra.id
     role_definition_name  = "Read"
-    principal_id          = azurerm_user_assigned_identity.pilot.principal_id
+    principal_id          = azurerm_user_assigned_identity.main.principal_id
     depends_on            = [ azurerm_user_assigned_identity.main ]
+}*/
+
+resource "azurerm_key_vault_access_policy" "infra" {
+  key_vault_id          = data.azurerm_key_vault.infra.id
+  object_id             = azurerm_user_assigned_identity.main.principal_id
+  tenant_id             = azurerm_user_assigned_identity.main.tenant_id
+  secret_permissions    = ["Get", "List"]
+  depends_on            = [ azurerm_user_assigned_identity.main ]
 }
 
 /****************************************************
@@ -124,6 +141,7 @@ resource "azurerm_container_app_environment" "main" {
   location                   = azurerm_resource_group.main.location
   resource_group_name        = azurerm_resource_group.main.name
   log_analytics_workspace_id = azurerm_log_analytics_workspace.main.id
+  infrastructure_subnet_id   = azurerm_subnet.chatbot.id
 }
 
 resource "azurerm_container_app_environment_storage" "main" {
@@ -140,7 +158,7 @@ resource "azurerm_container_app" "main" {
   container_app_environment_id = azurerm_container_app_environment.main.id
   resource_group_name          = azurerm_resource_group.main.name
   revision_mode                = "Single"
-  depends_on                   = [ azurerm_role_assignment.main ]
+  depends_on                   = [ azurerm_role_assignment.container_registry, azurerm_container_registry_task.main ]
 
   identity {
     type = "UserAssigned"
