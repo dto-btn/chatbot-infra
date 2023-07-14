@@ -3,6 +3,11 @@ locals {
   envs = { for tuple in regexall("(.*)=(.*)", file(".env")) : tuple[0] => sensitive(tuple[1]) }
 }
 
+variable "personal_token" {
+    type        = string
+    sensitive   = true
+}
+
 variable "project_name" {
     type = string
     default = "OpenAI-Chatbot-Pilot"

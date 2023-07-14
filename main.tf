@@ -29,10 +29,15 @@ resource "azurerm_virtual_network" "main" {
 
 resource "azurerm_subnet" "main" {
     name                  = "chatbot"
-    address_prefixes      = ["10.2.0.0/23"]
+    address_prefixes      = ["10.2.0.0/20"]
     virtual_network_name  = azurerm_virtual_network.main.name
     resource_group_name   = azurerm_resource_group.main.name
-    depends_on            = [ azurerm_virtual_network.main ]
+
+}
+
+resource "azurerm_subnet_network_security_group_association" "main" {
+  network_security_group_id = azurerm_network_security_group.main.id
+  subnet_id = azurerm_subnet.main.id
 }
 
 /****************************************************
@@ -71,16 +76,23 @@ resource "azurerm_container_registry" "main" {
 resource "azurerm_container_registry_task" "main" {
   name                  = "build-chatbot-api"
   container_registry_id = azurerm_container_registry.main.id
-  depends_on = [ azurerm_container_registry.main ]
+
   platform {
     os = "Linux"
   }
+
   docker_step {
     dockerfile_path      = "Dockerfile"
-    context_path         = "https://github.com/dto-btn/openai-app-poc#v3.0.2"
-    context_access_token = local.envs["PERSONAL_GITHUB_TOKEN"]
+    # v3.0.2 sha 0bfe783618a8a1ac515ecbf00352f89c1de32f87
+    context_path         = "https://github.com/dto-btn/openai-app-poc.git#0bfe783618a8a1ac515ecbf00352f89c1de32f87"
+    context_access_token = var.personal_token
     image_names          = ["${azurerm_container_registry.main.login_server}/chatbot-api:3.0.2"]
   }
+
+}
+
+resource "azurerm_container_registry_task_schedule_run_now" "main" {
+  container_registry_task_id = azurerm_container_registry_task.main.id
 }
 
 /****************************************************
@@ -107,22 +119,13 @@ resource "azurerm_role_assignment" "container_registry" {
     scope                 = azurerm_container_registry.main.id
     role_definition_name  = "AcrPull"
     principal_id          = azurerm_user_assigned_identity.main.principal_id
-    depends_on            = [ azurerm_user_assigned_identity.main, azurerm_container_registry.main ]
 }
-
-/*resource "azurerm_role_assignment" "key_vault" {
-    scope                 = data.azurerm_key_vault.infra.id
-    role_definition_name  = "Read"
-    principal_id          = azurerm_user_assigned_identity.main.principal_id
-    depends_on            = [ azurerm_user_assigned_identity.main ]
-}*/
 
 resource "azurerm_key_vault_access_policy" "infra" {
   key_vault_id          = data.azurerm_key_vault.infra.id
   object_id             = azurerm_user_assigned_identity.main.principal_id
   tenant_id             = azurerm_user_assigned_identity.main.tenant_id
   secret_permissions    = ["Get", "List"]
-  depends_on            = [ azurerm_user_assigned_identity.main ]
 }
 
 /****************************************************
@@ -141,7 +144,14 @@ resource "azurerm_container_app_environment" "main" {
   location                   = azurerm_resource_group.main.location
   resource_group_name        = azurerm_resource_group.main.name
   log_analytics_workspace_id = azurerm_log_analytics_workspace.main.id
-  infrastructure_subnet_id   = azurerm_subnet.chatbot.id
+  # commenting out for now since I need to figure subnet NS that is preventing terraform 
+  # from properly provisioning env without the error: 
+  #     Managed Environment Name: "ScDc-CIO-OpenAI-Chatbot-Pilot-env"): polling after CreateOrUpdate: Code="ManagedEnvironmentConnectionBlocked" 
+  #     Message="Managed Cluster 'ashyriver-2c6f408f' provision failed, error code is : ManagedEnvironmentConnectionBlocked."
+  #
+  #infrastructure_subnet_id   = azurerm_subnet.main.id
+  #internal_load_balancer_enabled = true
+  depends_on = [ azurerm_container_registry_task_schedule_run_now.main ]
 }
 
 resource "azurerm_container_app_environment_storage" "main" {
@@ -158,7 +168,6 @@ resource "azurerm_container_app" "main" {
   container_app_environment_id = azurerm_container_app_environment.main.id
   resource_group_name          = azurerm_resource_group.main.name
   revision_mode                = "Single"
-  depends_on                   = [ azurerm_role_assignment.container_registry, azurerm_container_registry_task.main ]
 
   identity {
     type = "UserAssigned"
@@ -209,6 +218,5 @@ resource "azurerm_container_app" "main" {
       storage_name = "app-fs"
       storage_type = "AzureFile"
     }
-
   }
 }
