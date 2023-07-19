@@ -70,12 +70,21 @@ resource "azurerm_storage_share" "main" {
   quota                = 5
 }
 
-resource "azurerm_storage_share_file" "main" {
-  for_each = fileset(path.module, "indices/*")
+resource "azurerm_storage_share_directory" "main" {
+  for_each              = toset([for _, v in flatten(fileset(path.module, "indices/**")): dirname(trim(v, "indices/"))])
+  name                  = each.key
+  share_name            = azurerm_storage_share.main.name
+  storage_account_name  = azurerm_storage_account.main.name
+}
 
-  name              = trim(each.key, "file_uploads/")
+resource "azurerm_storage_share_file" "main" {
+  for_each          = fileset(path.module, "indices/**")
+  
+  name              = basename(each.key)
   storage_share_id  = azurerm_storage_share.main.id
   source            = each.key
+  path              = dirname(trim(each.key, "indices/"))
+  depends_on = [ azurerm_storage_share_directory.main ]
 }
 
 /****************************************************
@@ -125,17 +134,17 @@ data "azurerm_key_vault" "infra" {
 *                       ROLES                       *
 *****************************************************/
 
-# resource "azurerm_user_assigned_identity" "main" {
-#   resource_group_name = azurerm_resource_group.main.name
-#   location            = var.default_location
-#   name                = "chatbot-app-identity"
-# }
+resource "azurerm_user_assigned_identity" "main" {
+  resource_group_name = azurerm_resource_group.main.name
+  location            = var.default_location
+  name                = "chatbot-app-identity"
+}
 
 /* need Owner role on SP to be able to perform this assignment */
 resource "azurerm_role_assignment" "container_registry" {
     scope                 = azurerm_container_registry.main.id
     role_definition_name  = "AcrPull"
-    principal_id          = azurerm_container_app.main.identity.0.principal_id
+    principal_id          = azurerm_user_assigned_identity.main.principal_id
 }
 
 resource "azurerm_key_vault_access_policy" "infra" {
@@ -187,12 +196,12 @@ resource "azurerm_container_app" "main" {
   revision_mode                = "Single"
 
   identity {
-    type = "SystemAssigned"
-    #identity_ids = [ azurerm_user_assigned_identity.main.id ]
+    type = "SystemAssigned, UserAssigned"
+    identity_ids = [ azurerm_user_assigned_identity.main.id ]
   }
 
   registry {
-    identity = "system"
+    identity = azurerm_user_assigned_identity.main.id
     server = azurerm_container_registry.main.login_server
   }
 
