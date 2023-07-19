@@ -3,6 +3,11 @@ locals {
   envs = { for tuple in regexall("(.*)=(.*)", file(".env")) : tuple[0] => sensitive(tuple[1]) }
 }
 
+variable "default_location" {
+    type    = string
+    default = "canadacentral"
+}
+
 variable "personal_token" {
     type        = string
     sensitive   = true

@@ -2,6 +2,10 @@
 
 This is the main module for the chatbot infrastructure in `terraform`.
 
+## prerequisites
+
+Have the latest indices that you wish to put up in the env directly under the folder (ex: `./indices/2023-03-12`).
+
 ## how to
 
 1. install terraform
