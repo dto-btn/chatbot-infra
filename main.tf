@@ -318,14 +318,42 @@ resource "azurerm_windows_web_app" "main" {
   location            = azurerm_service_plan.main.location
   service_plan_id     = azurerm_service_plan.main.id
 
-  site_config {}
+  /*
+  Need to ensure those 2 props are set as env variable in our case otherwise the WA won't start/connect properly.
+  ```json
+    "MicrosoftAppType": "UserAssignedMSI",
+    "MicrosoftAppId": "xxxx-xxxx-xxxx-xxxx-xxxxxxxxxx",
+    "MicrosoftAppTenantId": "xxxx-xxxx-xxxx-xxxx-xxxxxxxxxx",
+  ```
+  */
+  site_config {
+    application_stack {
+      current_stack = "dotnet"
+      dotnet_version = "v6.0"
+    }
+    use_32_bit_worker = false
+  }
+
+  app_settings = {
+    "DOTNET_MicrosoftAppType"         = "UserAssignedMSI",
+    "DOTNET_MicrosoftAppId"           = data.azurerm_client_config.current.client_id,
+    "DOTNET_MicrosoftAppTenantId"     = azurerm_user_assigned_identity.bot.tenant_id,
+    "WEBSITE_RUN_FROM_PACKAGE"        = 1
+  }
+
+  sticky_settings {
+    app_setting_names = [ "DOTNET_MicrosoftAppType",
+                          "DOTNET_MicrosoftAppId",
+                          "DOTNET_MicrosoftAppTenantId",
+                          "WEBSITE_RUN_FROM_PACKAGE" ]
+  }
 
   identity {
     type = "UserAssigned"
     identity_ids = [ azurerm_user_assigned_identity.bot.id ]
   }
 
-  #zip_deploy_file = 
+  zip_deploy_file = "packages/OpenAIPoCChatBot2-1.0.0.zip"
 }
 
 resource "azurerm_application_insights" "main" {
@@ -346,12 +374,24 @@ resource "azurerm_bot_service_azure_bot" "main" {
   resource_group_name = azurerm_resource_group.main.name
   location            = "global"
   microsoft_app_id    = data.azurerm_client_config.current.client_id
-  sku                 = "F0"
+  sku                 = "S1"
 
   developer_app_insights_api_key        = azurerm_application_insights_api_key.main.api_key
   developer_app_insights_application_id = azurerm_application_insights.main.app_id
 
+  microsoft_app_msi_id = azurerm_user_assigned_identity.bot.id
+  microsoft_app_tenant_id = azurerm_user_assigned_identity.bot.tenant_id
+  microsoft_app_type = "UserAssignedMSI"
+
   tags = {
     environment = "Pilot"
   }
+
+  endpoint = "https://${azurerm_windows_web_app.main.default_hostname}/api/messages"
+}
+
+resource "azurerm_bot_channel_ms_teams" "main" {
+  bot_name            = azurerm_bot_service_azure_bot.main.name
+  location            = "global"
+  resource_group_name = azurerm_resource_group.main.name
 }
