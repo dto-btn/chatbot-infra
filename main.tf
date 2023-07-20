@@ -6,6 +6,8 @@ resource "azurerm_resource_group" "main" {
   location = var.default_location
 }
 
+data "azurerm_client_config" "current" {}
+
 /****************************************************
 *                       VNET                        *
 *****************************************************/
@@ -45,8 +47,8 @@ resource "azurerm_subnet" "main" {
 }
 
 resource "azurerm_subnet_network_security_group_association" "main" {
-  network_security_group_id = azurerm_network_security_group.main.id
-  subnet_id = azurerm_subnet.main.id
+  network_security_group_id  = azurerm_network_security_group.main.id
+  subnet_id                  = azurerm_subnet.main.id
 }
 
 /****************************************************
@@ -109,10 +111,9 @@ resource "azurerm_container_registry_task" "main" {
 
   docker_step {
     dockerfile_path      = "Dockerfile"
-    # v3.0.3 sha de2ab985d0952b4e5d26bc4d65b0477e2f59e760
-    context_path         = "https://github.com/dto-btn/openai-app-poc.git#de2ab985d0952b4e5d26bc4d65b0477e2f59e760"
+    context_path         = "https://github.com/dto-btn/openai-app-poc.git#${var.api_version_sha}"
     context_access_token = var.personal_token
-    image_names          = ["${azurerm_container_registry.main.login_server}/chatbot-api:3.0.3"]
+    image_names          = ["${azurerm_container_registry.main.login_server}/chatbot-api:${var.api_version}"]
   }
 
 }
@@ -134,17 +135,23 @@ data "azurerm_key_vault" "infra" {
 *                       ROLES                       *
 *****************************************************/
 
-resource "azurerm_user_assigned_identity" "main" {
+resource "azurerm_user_assigned_identity" "api" {
   resource_group_name = azurerm_resource_group.main.name
   location            = var.default_location
-  name                = "chatbot-app-identity"
+  name                = "chatbot-api-identity"
+}
+
+resource "azurerm_user_assigned_identity" "bot" {
+  resource_group_name = azurerm_resource_group.main.name
+  location            = var.default_location
+  name                = "chatbot-bot-identity"
 }
 
 /* need Owner role on SP to be able to perform this assignment */
 resource "azurerm_role_assignment" "container_registry" {
     scope                 = azurerm_container_registry.main.id
     role_definition_name  = "AcrPull"
-    principal_id          = azurerm_user_assigned_identity.main.principal_id
+    principal_id          = azurerm_user_assigned_identity.api.principal_id
 }
 
 resource "azurerm_key_vault_access_policy" "infra" {
@@ -197,11 +204,11 @@ resource "azurerm_container_app" "main" {
 
   identity {
     type = "SystemAssigned, UserAssigned"
-    identity_ids = [ azurerm_user_assigned_identity.main.id ]
+    identity_ids = [ azurerm_user_assigned_identity.api.id ]
   }
 
   registry {
-    identity = azurerm_user_assigned_identity.main.id
+    identity = azurerm_user_assigned_identity.api.id
     server = azurerm_container_registry.main.login_server
   }
 
@@ -217,7 +224,7 @@ resource "azurerm_container_app" "main" {
   template {
     container {
       name   = "api"
-      image  = "${azurerm_container_registry.main.login_server}/chatbot-api:3.0.3"
+      image  = "${azurerm_container_registry.main.login_server}/chatbot-api:${var.api_version}"
       cpu    = 0.25
       memory = "0.5Gi"
 
@@ -254,6 +261,9 @@ resource "azurerm_container_app" "main" {
 /****************************************************
 *              COGNITIVE SERVICE(S)                 *
 *****************************************************/
+
+# UNABLE TO MIX ZONING ATM, blocked by policies, so we are keeping the one instance we have back there.
+
 # resource "azurerm_cognitive_account" "main" {
 #   name                = "${var.name_prefix}-${var.project_name}-ca"
 #   location            = "eastus"
@@ -289,3 +299,59 @@ resource "azurerm_container_app" "main" {
 #     type = "Standard"
 #   }
 # }
+
+/****************************************************
+*              Bot/Web App/ServicePlan              *
+*****************************************************/
+resource "azurerm_service_plan" "main" {
+  name                = "${var.name_prefix}-${var.project_name}-plan"
+  resource_group_name = azurerm_resource_group.main.name
+  location            = azurerm_resource_group.main.location
+  sku_name            = "S1"
+  os_type             = "Windows"
+}
+
+
+resource "azurerm_windows_web_app" "main" {
+  name                = "${var.name_prefix}-${var.project_name}-wa"
+  resource_group_name = azurerm_resource_group.main.name
+  location            = azurerm_service_plan.main.location
+  service_plan_id     = azurerm_service_plan.main.id
+
+  site_config {}
+
+  identity {
+    type = "UserAssigned"
+    identity_ids = [ azurerm_user_assigned_identity.bot.id ]
+  }
+
+  #zip_deploy_file = 
+}
+
+resource "azurerm_application_insights" "main" {
+  name                = "${var.name_prefix}-${var.project_name}-appinsights"
+  location            = azurerm_resource_group.main.location
+  resource_group_name = azurerm_resource_group.main.name
+  application_type    = "web"
+}
+
+resource "azurerm_application_insights_api_key" "main" {
+  name                    = "${var.name_prefix}-${var.project_name}-appinsightsapikey"
+  application_insights_id = azurerm_application_insights.main.id
+  read_permissions        = ["aggregate", "api", "draft", "extendqueries", "search"]
+}
+
+resource "azurerm_bot_service_azure_bot" "main" {
+  name                = "${var.name_prefix}-${var.project_name}-bot"
+  resource_group_name = azurerm_resource_group.main.name
+  location            = "global"
+  microsoft_app_id    = data.azurerm_client_config.current.client_id
+  sku                 = "F0"
+
+  developer_app_insights_api_key        = azurerm_application_insights_api_key.main.api_key
+  developer_app_insights_application_id = azurerm_application_insights.main.app_id
+
+  tags = {
+    environment = "Pilot"
+  }
+}
