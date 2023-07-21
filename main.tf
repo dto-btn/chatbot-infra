@@ -8,6 +8,11 @@ resource "azurerm_resource_group" "main" {
 
 data "azurerm_client_config" "current" {}
 
+resource "azurerm_source_control_token" "main" {
+  type = "GitHub"
+  token = var.personal_token
+}
+
 /****************************************************
 *                       VNET                        *
 *****************************************************/
@@ -309,6 +314,7 @@ resource "azurerm_service_plan" "main" {
   location            = azurerm_resource_group.main.location
   sku_name            = "S1"
   os_type             = "Windows"
+
 }
 
 
@@ -317,6 +323,9 @@ resource "azurerm_windows_web_app" "main" {
   resource_group_name = azurerm_resource_group.main.name
   location            = azurerm_service_plan.main.location
   service_plan_id     = azurerm_service_plan.main.id
+
+  client_affinity_enabled = true
+  https_only = true
 
   /*
   Need to ensure those 2 props are set as env variable in our case otherwise the WA won't start/connect properly.
@@ -327,6 +336,8 @@ resource "azurerm_windows_web_app" "main" {
   ```
   */
   site_config {
+    ftps_state = "FtpsOnly"
+
     application_stack {
       current_stack = "dotnet"
       dotnet_version = "v6.0"
@@ -335,17 +346,17 @@ resource "azurerm_windows_web_app" "main" {
   }
 
   app_settings = {
-    "DOTNET_MicrosoftAppType"         = "UserAssignedMSI",
-    "DOTNET_MicrosoftAppId"           = data.azurerm_client_config.current.client_id,
-    "DOTNET_MicrosoftAppTenantId"     = azurerm_user_assigned_identity.bot.tenant_id,
-    "WEBSITE_RUN_FROM_PACKAGE"        = 1
+    "MicrosoftAppType"         = "UserAssignedMSI",
+    "MicrosoftAppId"           = azurerm_user_assigned_identity.bot.client_id,
+    "MicrosoftAppTenantId"     = azurerm_user_assigned_identity.bot.tenant_id,
+    "ASPNETCORE_ENVIRONMENT"   = "pilot"
   }
 
   sticky_settings {
-    app_setting_names = [ "DOTNET_MicrosoftAppType",
-                          "DOTNET_MicrosoftAppId",
-                          "DOTNET_MicrosoftAppTenantId",
-                          "WEBSITE_RUN_FROM_PACKAGE" ]
+    app_setting_names = [ "MicrosoftAppType",
+                          "MicrosoftAppId",
+                          "MicrosoftAppTenantId",
+                          "ASPNETCORE_ENVIRONMENT" ]
   }
 
   identity {
@@ -353,7 +364,13 @@ resource "azurerm_windows_web_app" "main" {
     identity_ids = [ azurerm_user_assigned_identity.bot.id ]
   }
 
-  zip_deploy_file = "packages/OpenAIPoCChatBot2-1.0.0.zip"
+  #zip_deploy_file = "packages/deploy.zip"
+}
+
+resource "azurerm_app_service_source_control" "main" {
+  app_id = azurerm_windows_web_app.main.id
+  repo_url = "https://github.com/dto-btn/OpenAIPoCChatBot2.git"
+  branch = "main"
 }
 
 resource "azurerm_application_insights" "main" {
@@ -373,15 +390,15 @@ resource "azurerm_bot_service_azure_bot" "main" {
   name                = "${var.name_prefix}-${var.project_name}-bot"
   resource_group_name = azurerm_resource_group.main.name
   location            = "global"
-  microsoft_app_id    = data.azurerm_client_config.current.client_id
+  microsoft_app_id    = azurerm_user_assigned_identity.bot.client_id
   sku                 = "S1"
 
   developer_app_insights_api_key        = azurerm_application_insights_api_key.main.api_key
   developer_app_insights_application_id = azurerm_application_insights.main.app_id
 
-  microsoft_app_msi_id = azurerm_user_assigned_identity.bot.id
+  microsoft_app_msi_id    = azurerm_user_assigned_identity.bot.id
   microsoft_app_tenant_id = azurerm_user_assigned_identity.bot.tenant_id
-  microsoft_app_type = "UserAssignedMSI"
+  microsoft_app_type      = "UserAssignedMSI"
 
   tags = {
     environment = "Pilot"
