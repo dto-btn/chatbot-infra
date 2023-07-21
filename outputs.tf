@@ -10,7 +10,7 @@ output "registry_task_add_image" {
 
 output "ingress_endpoint" {
     description = "gives the ingress endpoint for the openai python api"
-    value       = azurerm_container_app.main.latest_revision_fqdn
+    value       = azurerm_container_app.main.ingress[0].fqdn
 }
 
 output "bot_endpoint" {

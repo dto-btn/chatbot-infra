@@ -227,6 +227,9 @@ resource "azurerm_container_app" "main" {
   }
 
   template {
+
+    min_replicas = 1
+
     container {
       name   = "api"
       image  = "${azurerm_container_registry.main.login_server}/chatbot-api:${var.api_version}"
@@ -349,14 +352,16 @@ resource "azurerm_windows_web_app" "main" {
     "MicrosoftAppType"         = "UserAssignedMSI",
     "MicrosoftAppId"           = azurerm_user_assigned_identity.bot.client_id,
     "MicrosoftAppTenantId"     = azurerm_user_assigned_identity.bot.tenant_id,
-    "ASPNETCORE_ENVIRONMENT"   = "pilot"
+    "ASPNETCORE_ENVIRONMENT"   = "pilot",
+    "OpenaiApiEndpoint"        = "https://${azurerm_container_app.main.ingress[0].fqdn}/query"
   }
 
   sticky_settings {
     app_setting_names = [ "MicrosoftAppType",
                           "MicrosoftAppId",
                           "MicrosoftAppTenantId",
-                          "ASPNETCORE_ENVIRONMENT" ]
+                          "ASPNETCORE_ENVIRONMENT",
+                          "OpenaiApiEndpoint" ]
   }
 
   identity {
