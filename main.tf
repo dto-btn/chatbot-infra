@@ -233,8 +233,8 @@ resource "azurerm_container_app" "main" {
     container {
       name   = "api"
       image  = "${azurerm_container_registry.main.login_server}/chatbot-api:${var.api_version}"
-      cpu    = 0.25
-      memory = "0.5Gi"
+      cpu    = 1
+      memory = "2Gi"
 
       env {
         name = "KEY_VAULT_NAME"
