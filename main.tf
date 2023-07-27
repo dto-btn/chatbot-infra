@@ -152,6 +152,12 @@ resource "azurerm_user_assigned_identity" "bot" {
   name                = "chatbot-bot-identity"
 }
 
+resource "azurerm_user_assigned_identity" "frontend" {
+  resource_group_name = azurerm_resource_group.main.name
+  location            = var.default_location
+  name                = "chatbot-frontend-identity"
+}
+
 /* need Owner role on SP to be able to perform this assignment */
 resource "azurerm_role_assignment" "container_registry" {
     scope                 = azurerm_container_registry.main.id
@@ -311,7 +317,7 @@ resource "azurerm_container_app" "main" {
 /****************************************************
 *              Bot/Web App/ServicePlan              *
 *****************************************************/
-resource "azurerm_service_plan" "main" {
+resource "azurerm_service_plan" "bot" {
   name                = "${var.name_prefix}-${var.project_name}-plan"
   resource_group_name = azurerm_resource_group.main.name
   location            = azurerm_resource_group.main.location
@@ -320,12 +326,11 @@ resource "azurerm_service_plan" "main" {
 
 }
 
-
-resource "azurerm_windows_web_app" "main" {
+resource "azurerm_windows_web_app" "bot" {
   name                = "${var.name_prefix}-${var.project_name}-wa"
   resource_group_name = azurerm_resource_group.main.name
-  location            = azurerm_service_plan.main.location
-  service_plan_id     = azurerm_service_plan.main.id
+  location            = azurerm_service_plan.bot.location
+  service_plan_id     = azurerm_service_plan.bot.id
 
   client_affinity_enabled = true
   https_only = true
@@ -372,34 +377,34 @@ resource "azurerm_windows_web_app" "main" {
   #zip_deploy_file = "packages/deploy.zip"
 }
 
-resource "azurerm_app_service_source_control" "main" {
-  app_id = azurerm_windows_web_app.main.id
+resource "azurerm_app_service_source_control" "bot" {
+  app_id = azurerm_windows_web_app.bot.id
   repo_url = "https://github.com/dto-btn/OpenAIPoCChatBot2.git"
   branch = "main"
 }
 
-resource "azurerm_application_insights" "main" {
+resource "azurerm_application_insights" "bot" {
   name                = "${var.name_prefix}-${var.project_name}-appinsights"
   location            = azurerm_resource_group.main.location
   resource_group_name = azurerm_resource_group.main.name
   application_type    = "web"
 }
 
-resource "azurerm_application_insights_api_key" "main" {
+resource "azurerm_application_insights_api_key" "bot" {
   name                    = "${var.name_prefix}-${var.project_name}-appinsightsapikey"
-  application_insights_id = azurerm_application_insights.main.id
+  application_insights_id = azurerm_application_insights.bot.id
   read_permissions        = ["aggregate", "api", "draft", "extendqueries", "search"]
 }
 
-resource "azurerm_bot_service_azure_bot" "main" {
+resource "azurerm_bot_service_azure_bot" "bot" {
   name                = "${var.name_prefix}-${var.project_name}-bot"
   resource_group_name = azurerm_resource_group.main.name
   location            = "global"
   microsoft_app_id    = azurerm_user_assigned_identity.bot.client_id
   sku                 = "S1"
 
-  developer_app_insights_api_key        = azurerm_application_insights_api_key.main.api_key
-  developer_app_insights_application_id = azurerm_application_insights.main.app_id
+  developer_app_insights_api_key        = azurerm_application_insights_api_key.bot.api_key
+  developer_app_insights_application_id = azurerm_application_insights.bot.app_id
 
   microsoft_app_msi_id    = azurerm_user_assigned_identity.bot.id
   microsoft_app_tenant_id = azurerm_user_assigned_identity.bot.tenant_id
@@ -412,8 +417,57 @@ resource "azurerm_bot_service_azure_bot" "main" {
   endpoint = "https://${azurerm_windows_web_app.main.default_hostname}/api/messages"
 }
 
-resource "azurerm_bot_channel_ms_teams" "main" {
-  bot_name            = azurerm_bot_service_azure_bot.main.name
+resource "azurerm_bot_channel_ms_teams" "bot" {
+  bot_name            = azurerm_bot_service_azure_bot.bot.name
   location            = "global"
   resource_group_name = azurerm_resource_group.main.name
+}
+
+/****************************************************
+*                 VueJS App frontend                *
+*****************************************************/
+resource "azurerm_service_plan" "frontend" {
+  name                = "${var.name_prefix}-${var.project_name}-plan"
+  resource_group_name = azurerm_resource_group.main.name
+  location            = azurerm_resource_group.main.location
+  sku_name            = "S1"
+  os_type             = "Linux"
+}
+
+resource "azurerm_linux_web_app" "frontend" {
+  name                = "${var.name_prefix}-${var.project_name}-wa"
+  resource_group_name = azurerm_resource_group.main.name
+  location            = azurerm_service_plan.frontend.location
+  service_plan_id     = azurerm_service_plan.frontend.id
+
+  client_affinity_enabled = true
+  https_only = true
+
+  site_config {
+    ftps_state = "FtpsOnly"
+
+    application_stack {
+      node_version = "16-lts"
+    }
+    use_32_bit_worker = false
+  }
+
+  app_settings = {
+    "VITE_API_BACKEND"        = "https://${azurerm_container_app.main.ingress[0].fqdn}"
+  }
+
+  sticky_settings {
+    app_setting_names = [ "VITE_API_BACKEND" ]
+  }
+
+  identity {
+    type = "UserAssigned"
+    identity_ids = [ azurerm_user_assigned_identity.frontend.id ]
+  }
+}
+
+resource "azurerm_app_service_source_control" "frontend" {
+  app_id = azurerm_linux_web_app.linux.id
+  repo_url = "https://github.com/dto-btn/chatbot-frontend.git"
+  branch = "main"
 }
