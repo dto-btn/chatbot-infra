@@ -317,7 +317,7 @@ resource "azurerm_container_app" "main" {
 /****************************************************
 *              Bot/Web App/ServicePlan              *
 *****************************************************/
-resource "azurerm_service_plan" "bot" {
+resource "azurerm_service_plan" "main" {
   name                = "${var.name_prefix}-${var.project_name}-plan"
   resource_group_name = azurerm_resource_group.main.name
   location            = azurerm_resource_group.main.location
@@ -326,11 +326,11 @@ resource "azurerm_service_plan" "bot" {
 
 }
 
-resource "azurerm_windows_web_app" "bot" {
+resource "azurerm_windows_web_app" "main" {
   name                = "${var.name_prefix}-${var.project_name}-wa"
   resource_group_name = azurerm_resource_group.main.name
-  location            = azurerm_service_plan.bot.location
-  service_plan_id     = azurerm_service_plan.bot.id
+  location            = azurerm_service_plan.main.location
+  service_plan_id     = azurerm_service_plan.main.id
 
   client_affinity_enabled = true
   https_only = true
@@ -377,34 +377,34 @@ resource "azurerm_windows_web_app" "bot" {
   #zip_deploy_file = "packages/deploy.zip"
 }
 
-resource "azurerm_app_service_source_control" "bot" {
-  app_id = azurerm_windows_web_app.bot.id
+resource "azurerm_app_service_source_control" "main" {
+  app_id = azurerm_windows_web_app.main.id
   repo_url = "https://github.com/dto-btn/OpenAIPoCChatBot2.git"
   branch = "main"
 }
 
-resource "azurerm_application_insights" "bot" {
+resource "azurerm_application_insights" "main" {
   name                = "${var.name_prefix}-${var.project_name}-appinsights"
   location            = azurerm_resource_group.main.location
   resource_group_name = azurerm_resource_group.main.name
   application_type    = "web"
 }
 
-resource "azurerm_application_insights_api_key" "bot" {
+resource "azurerm_application_insights_api_key" "main" {
   name                    = "${var.name_prefix}-${var.project_name}-appinsightsapikey"
-  application_insights_id = azurerm_application_insights.bot.id
+  application_insights_id = azurerm_application_insights.main.id
   read_permissions        = ["aggregate", "api", "draft", "extendqueries", "search"]
 }
 
-resource "azurerm_bot_service_azure_bot" "bot" {
+resource "azurerm_bot_service_azure_bot" "main" {
   name                = "${var.name_prefix}-${var.project_name}-bot"
   resource_group_name = azurerm_resource_group.main.name
   location            = "global"
   microsoft_app_id    = azurerm_user_assigned_identity.bot.client_id
   sku                 = "S1"
 
-  developer_app_insights_api_key        = azurerm_application_insights_api_key.bot.api_key
-  developer_app_insights_application_id = azurerm_application_insights.bot.app_id
+  developer_app_insights_api_key        = azurerm_application_insights_api_key.main.api_key
+  developer_app_insights_application_id = azurerm_application_insights.main.app_id
 
   microsoft_app_msi_id    = azurerm_user_assigned_identity.bot.id
   microsoft_app_tenant_id = azurerm_user_assigned_identity.bot.tenant_id
@@ -417,8 +417,8 @@ resource "azurerm_bot_service_azure_bot" "bot" {
   endpoint = "https://${azurerm_windows_web_app.main.default_hostname}/api/messages"
 }
 
-resource "azurerm_bot_channel_ms_teams" "bot" {
-  bot_name            = azurerm_bot_service_azure_bot.bot.name
+resource "azurerm_bot_channel_ms_teams" "main" {
+  bot_name            = azurerm_bot_service_azure_bot.main.name
   location            = "global"
   resource_group_name = azurerm_resource_group.main.name
 }
@@ -427,7 +427,7 @@ resource "azurerm_bot_channel_ms_teams" "bot" {
 *                 VueJS App frontend                *
 *****************************************************/
 resource "azurerm_service_plan" "frontend" {
-  name                = "${var.name_prefix}-${var.project_name}-plan"
+  name                = "${var.name_prefix}-${var.project_name}-frontend-plan"
   resource_group_name = azurerm_resource_group.main.name
   location            = azurerm_resource_group.main.location
   sku_name            = "S1"
@@ -435,7 +435,7 @@ resource "azurerm_service_plan" "frontend" {
 }
 
 resource "azurerm_linux_web_app" "frontend" {
-  name                = "${var.name_prefix}-${var.project_name}-wa"
+  name                = "${var.name_prefix}-${var.project_name}-frontend-wa"
   resource_group_name = azurerm_resource_group.main.name
   location            = azurerm_service_plan.frontend.location
   service_plan_id     = azurerm_service_plan.frontend.id
@@ -450,14 +450,17 @@ resource "azurerm_linux_web_app" "frontend" {
       node_version = "16-lts"
     }
     use_32_bit_worker = false
+
+    app_command_line = "npx serve -s dist/"
   }
 
   app_settings = {
     "VITE_API_BACKEND"        = "https://${azurerm_container_app.main.ingress[0].fqdn}"
+    "ENABLE_ORYX_BUILD"       = true
   }
 
   sticky_settings {
-    app_setting_names = [ "VITE_API_BACKEND" ]
+    app_setting_names = [ "VITE_API_BACKEND", "ENABLE_ORYX_BUILD" ]
   }
 
   identity {
@@ -466,8 +469,33 @@ resource "azurerm_linux_web_app" "frontend" {
   }
 }
 
+# only available outside of canada atm ..
+# resource "azurerm_static_site" "frontend" {
+#   name                = "${var.name_prefix}-${var.project_name}-frontend-swa"
+#   resource_group_name = azurerm_resource_group.main.name
+#   location            = var.default_location
+#   sku_tier            = "Standard"
+#   sku_size            = "Standard"
+# }
+
+# # https://github.com/hashicorp/terraform-provider-azurerm/issues/13451
+# # AND 
+# # For application settings. You may change to azapi_resource once Github issue 
+# # https://github.com/Azure/terraform-provider-azapi/issues/256 is closed.
+# resource azapi_resource_action appsetting {
+#   type = "Microsoft.Web/staticSites/config@2022-03-01"
+#   resource_id = "${azurerm_static_site.frontend.id}/config/appsettings"
+#   method = "PUT"
+
+#   body = jsonencode({
+#     properties = {
+#         "VITE_API_BACKEND"="https://${azurerm_container_app.main.ingress[0].fqdn}"
+#     }
+#   })
+# }
+
 resource "azurerm_app_service_source_control" "frontend" {
-  app_id = azurerm_linux_web_app.linux.id
+  app_id = azurerm_linux_web_app.frontend.id
   repo_url = "https://github.com/dto-btn/chatbot-frontend.git"
   branch = "main"
 }

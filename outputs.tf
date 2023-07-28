@@ -17,3 +17,9 @@ output "bot_endpoint" {
     description = "the bot endpoint that is used by the channels to communicate"
     value       = azurerm_bot_service_azure_bot.main.endpoint
 }
+
+output "frontend_endpoint" {
+    description = "the frontend app endpoint ..."
+    value       = azurerm_linux_web_app.frontend.default_hostname
+    #value        = azurerm_static_site.frontend.default_host_name
+}
