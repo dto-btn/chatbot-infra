@@ -40,10 +40,10 @@ variable "name_prefix_lowercase" {
 
 variable "api_version" {
     type = string
-    default = "3.0.4"
+    default = "3.0.5"
 }
 
 variable "api_version_sha" {
     type = string
-    default = "e05f961f49eba1b8c785adf9481e2a7348aae8ca"
+    default = "1c88ac7d4d3d40ddf46451de4c22d9af2d20dff2"
 }
