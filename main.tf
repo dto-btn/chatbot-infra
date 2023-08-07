@@ -374,12 +374,6 @@ resource "azurerm_windows_web_app" "main" {
   #zip_deploy_file = "packages/deploy.zip"
 }
 
-resource "azurerm_app_service_source_control" "main" {
-  app_id = azurerm_windows_web_app.main.id
-  repo_url = "https://github.com/dto-btn/OpenAIPoCChatBot2.git"
-  branch = "main"
-}
-
 resource "azurerm_application_insights" "main" {
   name                = "${var.name_prefix}-${var.project_name}-appinsights"
   location            = azurerm_resource_group.main.location
@@ -454,45 +448,49 @@ resource "azurerm_linux_web_app" "frontend" {
   app_settings = {
     "VITE_API_BACKEND"        = "https://${azurerm_container_app.main.ingress[0].fqdn}"
     "ENABLE_ORYX_BUILD"       = true
+    "MICROSOFT_PROVIDER_AUTHENTICATION_SECRET" = var.microsoft_provider_authentication_secret
   }
 
   sticky_settings {
-    app_setting_names = [ "VITE_API_BACKEND", "ENABLE_ORYX_BUILD" ]
+    app_setting_names = [ "VITE_API_BACKEND", "ENABLE_ORYX_BUILD", "MICROSOFT_PROVIDER_AUTHENTICATION_SECRET" ]
   }
 
   identity {
     type = "UserAssigned"
     identity_ids = [ azurerm_user_assigned_identity.frontend.id ]
   }
-}
 
-# only available outside of canada atm ..
-# resource "azurerm_static_site" "frontend" {
-#   name                = "${var.name_prefix}-${var.project_name}-frontend-swa"
-#   resource_group_name = azurerm_resource_group.main.name
-#   location            = var.default_location
-#   sku_tier            = "Standard"
-#   sku_size            = "Standard"
-# }
+  auth_settings_v2 {
+    auth_enabled = true
+    default_provider = "azureactivedirectory"
+    require_authentication = true
 
-# # https://github.com/hashicorp/terraform-provider-azurerm/issues/13451
-# # AND 
-# # For application settings. You may change to azapi_resource once Github issue 
-# # https://github.com/Azure/terraform-provider-azapi/issues/256 is closed.
-# resource azapi_resource_action appsetting {
-#   type = "Microsoft.Web/staticSites/config@2022-03-01"
-#   resource_id = "${azurerm_static_site.frontend.id}/config/appsettings"
-#   method = "PUT"
+    active_directory_v2 {
+      client_id = var.aad_client_id
+      client_secret_setting_name = "MICROSOFT_PROVIDER_AUTHENTICATION_SECRET"
+      tenant_auth_endpoint = var.aad_auth_endpoint
+      allowed_audiences = ["api://${var.aad_client_id}"]
+    }
 
-#   body = jsonencode({
-#     properties = {
-#         "VITE_API_BACKEND"="https://${azurerm_container_app.main.ingress[0].fqdn}"
-#     }
-#   })
-# }
+    # apple_v2 {
+    #   login_scopes = []
+    # }
 
-resource "azurerm_app_service_source_control" "frontend" {
-  app_id = azurerm_linux_web_app.frontend.id
-  repo_url = "https://github.com/dto-btn/chatbot-frontend.git"
-  branch = "main"
+    # facebook_v2 {
+    #   login_scopes = []
+    # }
+
+    # github_v2 {
+    #   login_scopes = []
+    # }
+
+    # google_v2 {
+    #   allowed_audiences = []
+    #   login_scopes      = []
+    # }
+
+    login {
+      token_store_enabled = true
+    }
+  }
 }
