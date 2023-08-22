@@ -275,41 +275,43 @@ resource "azurerm_container_app" "main" {
 /****************************************************
 *              COGNITIVE SERVICE(S)                 *
 *****************************************************/
-resource "azurerm_cognitive_account" "main" {
-  name                = "${var.name_prefix}-${var.project_name}-ca"
-  location            = "eastus"
-  resource_group_name = azurerm_resource_group.main.name
-  kind                = "OpenAI"
-  sku_name            = "S0"
-}
+# quota changes makes it so I can no longer automate it .. should be added as a data in the future ..
 
-resource "azurerm_cognitive_deployment" "gpt" {
-  name                 = "gpt-35-turbo"
-  cognitive_account_id = azurerm_cognitive_account.main.id
-  model {
-    format  = "OpenAI"
-    name    = "gpt-35-turbo"
-    version = "0301"
-  }
+# resource "azurerm_cognitive_account" "main" {
+#   name                = "${var.name_prefix}-${var.project_name}-ca"
+#   location            = "eastus"
+#   resource_group_name = azurerm_resource_group.main.name
+#   kind                = "OpenAI"
+#   sku_name            = "S0"
+# }
 
-  scale {
-    type = "Standard"
-  }
-}
+# resource "azurerm_cognitive_deployment" "gpt" {
+#   name                 = "gpt-35-turbo"
+#   cognitive_account_id = azurerm_cognitive_account.main.id
+#   model {
+#     format  = "OpenAI"
+#     name    = "gpt-35-turbo"
+#     version = "0301"
+#   }
 
-resource "azurerm_cognitive_deployment" "ada" {
-  name                 = "text-embedding-ada-002"
-  cognitive_account_id = azurerm_cognitive_account.main.id
-  model {
-    format  = "OpenAI"
-    name    = "text-embedding-ada-002"
-    version = "2"
-  }
+#   scale {
+#     type = "Standard"
+#   }
+# }
 
-  scale {
-    type = "Standard"
-  }
-}
+# resource "azurerm_cognitive_deployment" "ada" {
+#   name                 = "text-embedding-ada-002"
+#   cognitive_account_id = azurerm_cognitive_account.main.id
+#   model {
+#     format  = "OpenAI"
+#     name    = "text-embedding-ada-002"
+#     version = "2"
+#   }
+
+#   scale {
+#     type = "Standard"
+#   }
+# }
 
 /****************************************************
 *              Bot/Web App/ServicePlan              *
@@ -442,7 +444,7 @@ resource "azurerm_linux_web_app" "frontend" {
     }
     use_32_bit_worker = false
 
-    app_command_line = "npx serve -s dist/"
+    app_command_line = "NODE_ENV=production node server.js"
   }
 
   app_settings = {
