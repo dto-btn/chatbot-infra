@@ -1,8 +1,3 @@
-#local
-locals {
-  envs = { for tuple in regexall("(.*)=(.*)", file(".env")) : tuple[0] => sensitive(tuple[1]) }
-}
-
 variable "default_location" {
     type    = string
     default = "canadacentral"
@@ -62,4 +57,16 @@ variable "aad_client_id" {
 variable "aad_auth_endpoint" {
     type = string
     default = "https://sts.windows.net/d05bc194-94bf-4ad6-ae2e-1db0f2e38f5e/v2.0"
+}
+
+variable "env" {
+    type = string
+}
+
+variable "enable_auth" {
+    type = bool
+}
+
+variable "tm_provider" {
+    type = string
 }
