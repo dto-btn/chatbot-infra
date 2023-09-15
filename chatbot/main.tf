@@ -13,49 +13,7 @@ resource "azurerm_source_control_token" "main" {
   token = var.personal_token
 }
 
-/****************************************************
-*                       VNET                        *
-*****************************************************/
-resource "azurerm_network_security_group" "main" {
-  name                = "${var.name_prefix}-${var.project_name}-sg"
-  location            = var.default_location
-  resource_group_name = azurerm_resource_group.main.name
-}
-
-resource "azurerm_virtual_network" "main" {
-  name                = "${var.name_prefix}-${var.project_name}-vnet"
-  location            = var.default_location
-  resource_group_name = azurerm_resource_group.main.name
-  address_space       = [ "10.2.0.0/16" ]
-  dns_servers         = ["10.2.0.4", "10.2.0.5"]
-
-  tags = {
-    environment = var.env
-  }
-}
-
-resource "azurerm_subnet" "main" {
-    name                  = "chatbot"
-    address_prefixes      = ["10.2.0.0/20"]
-    virtual_network_name  = azurerm_virtual_network.main.name
-    resource_group_name   = azurerm_resource_group.main.name
-
-    # delegation {
-    #   name = "delegation"
-
-    #   service_delegation {
-    #     name    = "Microsoft.ContainerInstance/containerGroups"
-    #     actions = ["Microsoft.Network/virtualNetworks/subnets/join/action", "Microsoft.Network/virtualNetworks/subnets/prepareNetworkPolicies/action"]
-    #   }
-    # }
-
-}
-
-resource "azurerm_subnet_network_security_group_association" "main" {
-  network_security_group_id  = azurerm_network_security_group.main.id
-  subnet_id                  = azurerm_subnet.main.id
-}
-
+data "azurerm_subscription" "current" {}
 /****************************************************
 *                       STORAGE                     *
 *****************************************************/
@@ -165,6 +123,7 @@ resource "azurerm_key_vault_access_policy" "infra" {
   object_id             = azurerm_container_app.main.identity.0.principal_id
   tenant_id             = azurerm_container_app.main.identity.0.tenant_id
   secret_permissions    = ["Get", "List"]
+  provider              = azurerm.dev
 }
 
 /****************************************************
@@ -188,8 +147,8 @@ resource "azurerm_container_app_environment" "main" {
   #     Managed Environment Name: "ScDc-CIO-OpenAI-Chatbot-Pilot-env"): polling after CreateOrUpdate: Code="ManagedEnvironmentConnectionBlocked" 
   #     Message="Managed Cluster 'ashyriver-2c6f408f' provision failed, error code is : ManagedEnvironmentConnectionBlocked."
   #
-  #infrastructure_subnet_id   = azurerm_subnet.main.id
-  #internal_load_balancer_enabled = true
+  infrastructure_subnet_id   = azurerm_subnet.backend.id
+  internal_load_balancer_enabled = true
   depends_on = [ azurerm_container_registry_task_schedule_run_now.main ]
 }
 
@@ -268,7 +227,7 @@ resource "azurerm_container_app" "main" {
 }
 
 /****************************************************
-*                 VueJS App frontend                *
+*                 Azure App frontend                *
 *****************************************************/
 resource "azurerm_service_plan" "frontend" {
   name                = "${var.name_prefix}-${var.project_name}-frontend-plan"
@@ -284,6 +243,8 @@ resource "azurerm_linux_web_app" "frontend" {
   location            = azurerm_service_plan.frontend.location
   service_plan_id     = azurerm_service_plan.frontend.id
 
+  virtual_network_subnet_id = azurerm_subnet.frontend.id
+
   client_affinity_enabled = true
   https_only = true
 
@@ -291,7 +252,7 @@ resource "azurerm_linux_web_app" "frontend" {
     ftps_state = "FtpsOnly"
 
     application_stack {
-      node_version = "16-lts"
+      node_version = "18-lts"
     }
     use_32_bit_worker = false
 

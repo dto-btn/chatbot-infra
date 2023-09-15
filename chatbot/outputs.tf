@@ -18,3 +18,10 @@ output "frontend_endpoint" {
     value       = azurerm_linux_web_app.frontend.default_hostname
     #value        = azurerm_static_site.frontend.default_host_name
 }
+
+output "affected_subscription" {
+    description = "Shows the affected subscription (aka default provider used)"
+    value       = data.azurerm_subscription.current.display_name
+    #sensitive = true
+
+}
