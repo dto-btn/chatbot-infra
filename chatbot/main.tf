@@ -142,11 +142,6 @@ resource "azurerm_container_app_environment" "main" {
   location                   = var.default_location
   resource_group_name        = azurerm_resource_group.main.name
   log_analytics_workspace_id = azurerm_log_analytics_workspace.main.id
-  # commenting out for now since I need to figure subnet NS that is preventing terraform 
-  # from properly provisioning env without the error: 
-  #     Managed Environment Name: "ScDc-CIO-OpenAI-Chatbot-Pilot-env"): polling after CreateOrUpdate: Code="ManagedEnvironmentConnectionBlocked" 
-  #     Message="Managed Cluster 'ashyriver-2c6f408f' provision failed, error code is : ManagedEnvironmentConnectionBlocked."
-  #
   infrastructure_subnet_id   = azurerm_subnet.backend.id
   internal_load_balancer_enabled = true
   depends_on = [ azurerm_container_registry_task_schedule_run_now.main ]
@@ -159,6 +154,7 @@ resource "azurerm_container_app_environment_storage" "main" {
   share_name                   = azurerm_storage_share.main.name
   access_key                   = azurerm_storage_account.main.primary_access_key
   access_mode                  = "ReadWrite"
+  depends_on = [ azurerm_storage_share_file.main  ] #indices can be big and take a while to be uploaded
 }
 
 resource "azurerm_container_app" "main" {
@@ -243,7 +239,7 @@ resource "azurerm_linux_web_app" "frontend" {
   location            = azurerm_service_plan.frontend.location
   service_plan_id     = azurerm_service_plan.frontend.id
 
-  virtual_network_subnet_id = azurerm_subnet.frontend.id
+  virtual_network_subnet_id = azurerm_subnet.main.id
 
   client_affinity_enabled = true
   https_only = true
@@ -263,10 +259,12 @@ resource "azurerm_linux_web_app" "frontend" {
     "VITE_API_BACKEND"        = "https://${azurerm_container_app.main.ingress[0].fqdn}"
     "ENABLE_ORYX_BUILD"       = true
     "MICROSOFT_PROVIDER_AUTHENTICATION_SECRET" = var.microsoft_provider_authentication_secret
+    "DB_CONN" = azurerm_cosmosdb_account.db.connection_strings[0]
+    "PORT" = 8080
   }
 
   sticky_settings {
-    app_setting_names = [ "VITE_API_BACKEND", "ENABLE_ORYX_BUILD", "MICROSOFT_PROVIDER_AUTHENTICATION_SECRET" ]
+    app_setting_names = [ "VITE_API_BACKEND", "ENABLE_ORYX_BUILD", "MICROSOFT_PROVIDER_AUTHENTICATION_SECRET", "DB_CONN", "PORT" ]
   }
 
   identity {

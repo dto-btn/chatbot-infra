@@ -23,5 +23,9 @@ output "affected_subscription" {
     description = "Shows the affected subscription (aka default provider used)"
     value       = data.azurerm_subscription.current.display_name
     #sensitive = true
+}
 
+output "db_conn_string" {
+    value = azurerm_cosmosdb_account.db.connection_strings[0]
+    sensitive = true
 }
