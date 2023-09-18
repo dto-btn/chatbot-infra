@@ -23,4 +23,6 @@ resource "azurerm_cosmosdb_account" "db" {
     id = azurerm_subnet.main.id
     ignore_missing_vnet_service_endpoint = false
   }
+
+  
 }
