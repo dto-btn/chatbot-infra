@@ -70,3 +70,9 @@ variable "enable_auth" {
 variable "tm_provider" {
     type = string
 }
+
+variable "frontend_branch_name" {
+    type = string
+    default = "main"
+    description = "the branch the github hook will be tied to for the frontend application"
+}
