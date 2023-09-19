@@ -14,6 +14,7 @@ resource "azurerm_source_control_token" "main" {
 }
 
 data "azurerm_subscription" "current" {}
+
 /****************************************************
 *                       STORAGE                     *
 *****************************************************/
