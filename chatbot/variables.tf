@@ -76,3 +76,20 @@ variable "frontend_branch_name" {
     default = "main"
     description = "the branch the github hook will be tied to for the frontend application"
 }
+
+variable "openai_endpoint_name" {
+    type = string
+}
+
+variable "openai_deployment_name" {
+    type = string
+}
+
+variable "openai_key_name" {
+    type = string
+}
+
+variable "context_window" {
+    type = number
+    default = 16384
+}

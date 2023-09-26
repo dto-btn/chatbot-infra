@@ -65,8 +65,10 @@ resource "azurerm_container_registry" "main" {
   admin_enabled       = true
 }
 
+# TODO: find a better way to create an automated build, 
+#       ideally this should be done via github actions..
 resource "azurerm_container_registry_task" "main" {
-  name                  = "build-chatbot-api"
+  name                  = "build-${var.api_version_sha}"
   container_registry_id = azurerm_container_registry.main.id
 
   platform {
@@ -85,7 +87,6 @@ resource "azurerm_container_registry_task" "main" {
 resource "azurerm_container_registry_task_schedule_run_now" "main" {
   container_registry_task_id = azurerm_container_registry_task.main.id
 }
-
 /****************************************************
 *                    Key Vault                      *
 *****************************************************/
@@ -163,6 +164,7 @@ resource "azurerm_container_app" "main" {
   container_app_environment_id = azurerm_container_app_environment.main.id
   resource_group_name          = azurerm_resource_group.main.name
   revision_mode                = "Single"
+  depends_on = [ azurerm_container_registry_task_schedule_run_now.main ]
 
   identity {
     type = "SystemAssigned, UserAssigned"
@@ -190,8 +192,8 @@ resource "azurerm_container_app" "main" {
     container {
       name   = "api"
       image  = "${azurerm_container_registry.main.login_server}/chatbot-api:${var.api_version}"
-      cpu    = 1
-      memory = "2Gi"
+      cpu    = 2
+      memory = "4Gi"
 
       env {
         name = "KEY_VAULT_NAME"
@@ -200,12 +202,22 @@ resource "azurerm_container_app" "main" {
 
       env {
         name = "OPENAI_ENDPOINT_NAME"
-        value = "scdc-cio-dto-openai-poc-oai"
+        value = var.openai_endpoint_name
       }
 
       env {
         name = "OPENAI_DEPLOYMENT_NAME"
-        value = "gpt-35-turbo"
+        value = var.openai_deployment_name
+      }
+
+      env {
+        name = "OPENAI_KEY_NAME"
+        value = var.openai_key_name
+      }
+
+      env {
+        name = "CONTEXT_WINDOW"
+        value = var.context_window
       }
 
       volume_mounts {
@@ -257,11 +269,11 @@ resource "azurerm_linux_web_app" "frontend" {
   }
 
   app_settings = {
-    "VITE_API_BACKEND"        = "https://${azurerm_container_app.main.ingress[0].fqdn}"
-    "ENABLE_ORYX_BUILD"       = true
-    "MICROSOFT_PROVIDER_AUTHENTICATION_SECRET" = var.microsoft_provider_authentication_secret
-    "DB_CONN" = azurerm_cosmosdb_account.db.connection_strings[0]
-    "PORT" = 8080
+    VITE_API_BACKEND        = join("", ["https://", azurerm_container_app.main.ingress[0].fqdn])
+    ENABLE_ORYX_BUILD       = true
+    MICROSOFT_PROVIDER_AUTHENTICATION_SECRET = var.microsoft_provider_authentication_secret
+    DB_CONN = azurerm_cosmosdb_account.db.connection_strings[0]
+    PORT = 8080
   }
 
   sticky_settings {

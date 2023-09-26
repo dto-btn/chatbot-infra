@@ -8,6 +8,9 @@ resource "azurerm_cosmosdb_account" "db" {
 
   is_virtual_network_filter_enabled = true
 
+  #https://learn.microsoft.com/en-ca/azure/cosmos-db/how-to-configure-firewall#allow-requests-from-the-azure-portal
+  ip_range_filter = "104.42.195.92,40.76.54.131,52.176.6.30,52.169.50.45,52.187.184.26"
+
   consistency_policy {
     consistency_level       = "Session"
     max_interval_in_seconds = 5
