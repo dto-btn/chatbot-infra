@@ -273,9 +273,9 @@ resource "azurerm_linux_web_app" "frontend" {
     ENABLE_ORYX_BUILD       = true
     MICROSOFT_PROVIDER_AUTHENTICATION_SECRET = var.microsoft_provider_authentication_secret
     DB_CONN = azurerm_cosmosdb_account.db.connection_strings[0]
-    PORT = 8080  
+    PORT = 8080
   }
-  
+
   sticky_settings {
     app_setting_names = [ "VITE_API_BACKEND", "ENABLE_ORYX_BUILD", "MICROSOFT_PROVIDER_AUTHENTICATION_SECRET", "DB_CONN", "PORT" ]
   }
