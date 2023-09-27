@@ -206,18 +206,8 @@ resource "azurerm_container_app" "main" {
       }
 
       env {
-        name = "OPENAI_DEPLOYMENT_NAME"
-        value = var.openai_deployment_name
-      }
-
-      env {
         name = "OPENAI_KEY_NAME"
         value = var.openai_key_name
-      }
-
-      env {
-        name = "CONTEXT_WINDOW"
-        value = var.context_window
       }
 
       volume_mounts {

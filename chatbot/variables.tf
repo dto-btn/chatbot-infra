@@ -81,15 +81,6 @@ variable "openai_endpoint_name" {
     type = string
 }
 
-variable "openai_deployment_name" {
-    type = string
-}
-
 variable "openai_key_name" {
     type = string
-}
-
-variable "context_window" {
-    type = number
-    default = 16384
 }
