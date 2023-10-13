@@ -139,6 +139,8 @@ resource "azurerm_log_analytics_workspace" "main" {
   retention_in_days   = 30
 }
 
+#https://github.com/microsoft/azure-container-apps/issues/334#issuecomment-1218451355
+# needed to run az provider register --namespace Microsoft.ContainerService
 resource "azurerm_container_app_environment" "main" {
   name                       = "${var.name_prefix}-${var.project_name}-env"
   location                   = var.default_location
