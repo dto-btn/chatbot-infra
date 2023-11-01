@@ -84,3 +84,8 @@ variable "openai_endpoint_name" {
 variable "openai_key_name" {
     type = string
 }
+
+variable "index_name" {
+    type = string
+    description = "this is the index name inside the storage account that will be loaded by the api"
+}

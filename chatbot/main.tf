@@ -212,6 +212,11 @@ resource "azurerm_container_app" "main" {
         value = var.openai_key_name
       }
 
+      env {
+        name = "INDEX_NAME"
+        value = var.index_name
+      }
+
       volume_mounts {
         name = "app-fs" 
         path = "/app/storage"
